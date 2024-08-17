@@ -56,6 +56,7 @@ void initializeI2C()
     __no_operation();
 }
 
+
 void suspendI2CInterrupts() {
     EUSCI_B_I2C_disableInterrupt(EUSCI_B0_BASE,
          EUSCI_B_I2C_RECEIVE_INTERRUPT0
@@ -66,6 +67,7 @@ void resumeI2CInterrupts() {
     EUSCI_B_I2C_enableInterrupt(EUSCI_B0_BASE,
         EUSCI_B_I2C_RECEIVE_INTERRUPT0
         );
+    __bis_SR_register(CPUOFF + GIE); // Enter LPM with interrupts
 }
 
 
@@ -133,6 +135,7 @@ void USCIB0_ISR(void)
             commandID = EUSCI_B_I2C_slaveGetData(EUSCI_B0_BASE);
             // Pass to command handler
             suspendI2CInterrupts(); // Suspend interrupts during command handling
+            __bic_SR_register_on_exit(CPUOFF); // Exit LPM
             commandHandler();
             break;
         case USCI_I2C_UCTXIFG0:     // TXIFG0
