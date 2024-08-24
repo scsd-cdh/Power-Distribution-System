@@ -8,10 +8,11 @@
 #include <app/App.h>
 #include <driverlib.h>
 
-#define SLAVE_ADDRESS 0x48
+#define SLAVE_ADDRESS 0x08
 
 static volatile appStatus app;
 static volatile uint8_t commandID;
+static volatile uint8_t commandReceived = 0;  // Boolean
 
 void init_App(){
     app = idle;
@@ -117,6 +118,9 @@ void USCIB0_ISR(void)
         case USCI_I2C_UCSTTIFG:     // START condition detected with own address (slave mode only)
             break;
         case USCI_I2C_UCSTPIFG:     // STOP condition detected (master & slave mode)
+            // Based on current state get payload size
+            // Write from sned_payload buffer until payload size is reached
+            // Reset counter
             break;
         case USCI_I2C_UCRXIFG3:     // RXIFG3
             break;
@@ -131,12 +135,18 @@ void USCIB0_ISR(void)
         case USCI_I2C_UCTXIFG1:     // TXIFG1
             break;
         case USCI_I2C_UCRXIFG0:     // RXIFG0
-            // Read command from master
-            commandID = EUSCI_B_I2C_slaveGetData(EUSCI_B0_BASE);
-            // Pass to command handler
-            suspendI2CInterrupts(); // Suspend interrupts during command handling
-            __bic_SR_register_on_exit(CPUOFF); // Exit LPM
-            commandHandler();
+            // Read byte from master
+            if (commandReceived) {
+                // set byte at get_payload_pointer to the byte read
+            } else {
+                // If no command has been recevied, assume command byte
+                commandID = EUSCI_B_I2C_slaveGetData(EUSCI_B0_BASE);
+                commandReceived = 1;  // Set command as received
+                // Pass to command handler
+                //suspendI2CInterrupts(); // Suspend interrupts during command handling
+                __bic_SR_register_on_exit(CPUOFF); // Exit LPM
+                commandHandler();
+            }
             break;
         case USCI_I2C_UCTXIFG0:     // TXIFG0
             break;
@@ -157,6 +167,7 @@ void run(){
     switch(app){
         /* Idle state */
         case idle:
+            commandReceived = 0; // Reset whether command was received
             resumeI2CInterrupts(); // Resume interrupts after executing command
             break;
         /* Modes used for each command */
@@ -168,6 +179,8 @@ void run(){
             break;
         case health_check:
             // do something
+            GPIO_setAsOutputPin(GPIO_PORT_P1, GPIO_PIN0);  // Green LED off
+            GPIO_setOutputLowOnPin(GPIO_PORT_P1, GPIO_PIN0);
             GPIO_setAsOutputPin(GPIO_PORT_P4, GPIO_PIN6);  // Red LED on
             GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN6);
             app = idle;
@@ -188,10 +201,10 @@ void run(){
             // do something
             GPIO_setAsOutputPin(GPIO_PORT_P4, GPIO_PIN6);  // Flash both LEDs
             GPIO_toggleOutputOnPin(GPIO_PORT_P4, GPIO_PIN6);
-            GPIO_toggleOutputOnPin(GPIO_PORT_P4, GPIO_PIN6);
+            //GPIO_toggleOutputOnPin(GPIO_PORT_P4, GPIO_PIN6);
             GPIO_setAsOutputPin(GPIO_PORT_P1, GPIO_PIN0);
             GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
-            GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
+            //GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
             app = idle;
             break;
     }
