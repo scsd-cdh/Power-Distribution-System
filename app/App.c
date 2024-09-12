@@ -6,13 +6,17 @@
  */
 
 #include <app/App.h>
-#include <driverlib.h>
 
 #define SLAVE_ADDRESS 0x08
 
+
+///////////////////////////////////////////////////////////////////////////change me later
+#define Stop_Condition 0x13
+
 static volatile appStatus app;
-static volatile uint8_t commandID;
-static volatile uint8_t commandReceived = 0;  // Boolean
+static volatile error_codes error;
+
+//static volatile bool commandReceived = 0;  // Boolean
 
 void init_App(){
     app = idle;
@@ -73,9 +77,9 @@ void resumeI2CInterrupts() {
 
 
 
-void commandHandler() {
+void commandHandler(uint8_t cmd) {
 
-    switch(commandID){
+    switch(cmd){
 
         case SystemStatus:
             app = system_status;
@@ -94,8 +98,10 @@ void commandHandler() {
             break;
 
         default: // Unrecognized command
+            app =
             break;
     }
+
 }
 
 
@@ -136,6 +142,7 @@ void USCIB0_ISR(void)
             break;
         case USCI_I2C_UCRXIFG0:     // RXIFG0
             // Read byte from master
+            /*
             if (commandReceived) {
                 // set byte at get_payload_pointer to the byte read
             } else {
@@ -146,7 +153,45 @@ void USCIB0_ISR(void)
                 //suspendI2CInterrupts(); // Suspend interrupts during command handling
                 __bic_SR_register_on_exit(CPUOFF); // Exit LPM
                 commandHandler();
+            }*/
+
+
+            cmd_Read[bytes_received] = EUSCI_B_I2C_slaveGetData(EUSCI_B0_BASE);
+
+            if(bytes_received == 0){
+                get_command_length();
             }
+
+            //
+            if(cmd_Read[bytes_received] == Stop_Condition && command_length == bytes_received){
+                suspendI2CInterrupts();
+                command_proccess(cmd_Read[bytes_received]);
+                bytes_received=0;
+            }
+            else if(cmd_Read[bytes_received] == Stop_Condition){
+                //write me later
+                //too early stop condition
+                command_process(badCommand);
+                bytes_received=0;
+                suspendI2CInterrupts();
+            }
+            else if(command_length == bytes_received){
+                //write me later
+                //too many bytes
+                command_process(badCommand + 1);
+                bytes_received=0;
+                suspendI2CInterrupts();
+            }
+            else{
+                bytes_received++;
+            }
+            /*
+             * there is gonna be another case where it doesn't give required bytes and stop condition
+             * it needs to be checked with timer
+             */
+
+
+
             break;
         case USCI_I2C_UCTXIFG0:     // TXIFG0
             break;
@@ -167,7 +212,7 @@ void run(){
     switch(app){
         /* Idle state */
         case idle:
-            commandReceived = 0; // Reset whether command was received
+            //commandReceived = 0; // Reset whether command was received
             resumeI2CInterrupts(); // Resume interrupts after executing command
             break;
         /* Modes used for each command */
